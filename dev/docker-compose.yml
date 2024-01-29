@@ -1,0 +1,56 @@
+version: '3.9'
+services:
+  db:
+    container_name: 'luminardb-linear-clone_mysql'
+    image: mysql:8.2.0
+    restart: always
+    environment:
+      MYSQL_DATABASE: 'db'
+      # So you don't have to use root, but you can if you like
+      MYSQL_USER: 'user'
+      # You can use whatever password you like
+      MYSQL_PASSWORD: "password"
+      # Password for root access
+      MYSQL_ROOT_PASSWORD: "password"
+    ports:
+      - '3309:3306'
+    volumes:
+      - luminardb-linear-clone:/var/lib/mysql
+      - ./data:/docker-entrypoint-initdb.d
+    networks:
+      - luminardb-linear-clone_network
+  soketi:
+    container_name: 'luminardb-linear-clone_soketi-server'
+    restart: unless-stopped
+    image: 'quay.io/soketi/soketi:1.0-16-distroless'
+    ports:
+      - '6001:6001'
+      - '9601:9601'
+    environment:
+      - SOKETI_DEBUG=1
+      - SOKETI_DEFAULT_APP_ID=${PUSHER_APP_ID}
+      - SOKETI_DEFAULT_APP_KEY=${PUSHER_APP_KEY}
+      - SOKETI_DEFAULT_APP_SECRET=${PUSHER_APP_SECRET}
+    networks:
+      - luminardb-linear-clone_network
+  redis:
+    container_name: luminardb-linear-clone_redis
+    restart: unless-stopped
+    image: redis:latest
+    command: redis-server /usr/local/etc/redis/redis.conf
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./redis.conf:/usr/local/etc/redis/redis.conf
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    networks:
+      - luminardb-linear-clone_network  
+volumes:
+  luminardb-linear-clone:
+
+networks:
+  luminardb-linear-clone_network:
+    driver: bridge

@@ -1,0 +1,84 @@
+version: '3.9'
+services:
+  db:
+    container_name: luminardb_linear_clone_mysql
+    image: mysql:8.2.0
+    restart: always
+    environment:
+      MYSQL_DATABASE: 'db'
+      # So you don't have to use root, but you can if you like
+      MYSQL_USER: ${MYSQL_USER}
+      # You can use whatever password you like
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      # Password for root access
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - ./data:/docker-entrypoint-initdb.d
+      - luminardb_linear_clone:/var/lib/mysql
+    networks:
+      - luminardb_linear_clone_network
+  soketi:
+    container_name: 'soketi_server'
+    restart: unless-stopped
+    image: 'quay.io/soketi/soketi:1.0-16-distroless'
+    ports:
+      - '6001:6001'
+    environment:
+      - SOKETI_DEBUG=1
+      - SOKETI_DEFAULT_APP_ID=${PUSHER_APP_ID}
+      - SOKETI_DEFAULT_APP_KEY=${PUSHER_APP_KEY}
+      - SOKETI_DEFAULT_APP_SECRET=${PUSHER_APP_SECRET}
+    networks:
+      - luminardb_linear_clone_network
+  next-app:
+    build: 
+      context: ..
+      args:
+        - NODE_ENV=production
+        - DATABASE_URL=${DATABASE_URL}
+        - NEXT_PUBLIC_PUSHER_APP_KEY=${NEXT_PUBLIC_PUSHER_APP_KEY}
+        - NEXT_PUBLIC_PUSHER_HOST=${NEXT_PUBLIC_PUSHER_HOST}
+        - PUSHER_APP_ID=${PUSHER_APP_ID}
+        - PUSHER_APP_KEY=${PUSHER_APP_KEY}
+        - PUSHER_APP_SECRET=${PUSHER_APP_SECRET}
+        - PUSHER_APP_HOST=${PUSHER_APP_HOST}
+        - PUSHER_APP_PORT=${PUSHER_APP_PORT}
+        - REDIS_URL=${REDIS_URL}
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=${DATABASE_URL}
+      - NEXT_PUBLIC_PUSHER_APP_KEY=${NEXT_PUBLIC_PUSHER_APP_KEY}
+      - NEXT_PUBLIC_PUSHER_HOST=${NEXT_PUBLIC_PUSHER_HOST}
+      - PUSHER_APP_ID=${PUSHER_APP_ID}
+      - PUSHER_APP_KEY=${PUSHER_APP_KEY}
+      - PUSHER_APP_SECRET=${PUSHER_APP_SECRET}
+      - PUSHER_APP_HOST=${PUSHER_APP_HOST}
+      - PUSHER_APP_PORT=${PUSHER_APP_PORT}
+      - REDIS_URL=${REDIS_URL}
+    depends_on:
+      - db
+      - soketi
+    networks:
+      - luminardb_linear_clone_network
+  redis:
+    container_name: luminardb_linear_clone_redis
+    restart: unless-stopped
+    image: redis:latest
+    command: redis-server /usr/local/etc/redis/redis.conf
+    volumes:
+      - ./redis.conf:/usr/local/etc/redis/redis.conf
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    networks:
+      - luminardb_linear_clone_network  
+
+volumes:
+  luminardb_linear_clone:
+
+networks:
+  luminardb_linear_clone_network:
+    driver: bridge
