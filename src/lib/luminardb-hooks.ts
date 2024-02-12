@@ -1,25 +1,10 @@
 import { useLuminarDB } from "@/providers/luminardb-provider";
-import { noop } from "@/utils/utils";
-import React from "react";
 import {
   type FilterOption,
   type InferSchemaTypeFromCollection,
 } from "luminardb";
+import React from "react";
 import { type LuminarDBSchema } from "./luminardb";
-
-export function useIsDBReady() {
-  const db = useLuminarDB();
-  const [isReady, setIsReady] = React.useState(db.isInitialized);
-
-  React.useEffect(() => {
-    if (db.isInitialized) return;
-    db.initialize()
-      .then(() => setIsReady(true))
-      .catch(noop);
-  }, [db]);
-
-  return isReady;
-}
 
 const useIsomorphicLayoutEffect =
   typeof window !== "undefined" ? React.useLayoutEffect : React.useEffect;
@@ -30,7 +15,6 @@ export function useCollection<T extends keyof LuminarDBSchema>(
   dependencies: React.DependencyList = [],
 ) {
   const db = useLuminarDB();
-  const isReady = useIsDBReady();
 
   const [data, setData] = React.useState<
     Array<InferSchemaTypeFromCollection<LuminarDBSchema[T]>>
@@ -39,10 +23,7 @@ export function useCollection<T extends keyof LuminarDBSchema>(
   const [isLoading, setIsLoading] = React.useState(true);
 
   useIsomorphicLayoutEffect(() => {
-    if (!isReady) {
-      setData([]);
-      return;
-    }
+    setData([]);
 
     const unsubscribe = db
       .collection(collection)
@@ -62,7 +43,7 @@ export function useCollection<T extends keyof LuminarDBSchema>(
       setData([]);
       setIsLoading(true);
     };
-  }, [isReady, collection, ...dependencies]);
+  }, [collection, ...dependencies]);
 
   return { data, isLoading };
 }
@@ -78,7 +59,6 @@ export function useDocument<T extends keyof LuminarDBSchema>(
   } = { onChange() {} },
 ) {
   const db = useLuminarDB();
-  const isReady = useIsDBReady();
 
   const [data, setData] = React.useState<
     InferSchemaTypeFromCollection<LuminarDBSchema[T]> | undefined
@@ -87,11 +67,7 @@ export function useDocument<T extends keyof LuminarDBSchema>(
   const [isLoading, setIsLoading] = React.useState(true);
 
   useIsomorphicLayoutEffect(() => {
-    if (!isReady) {
-      setData(undefined);
-      return;
-    }
-
+    setData(undefined);
     if (!key) {
       setData(undefined);
       return;
@@ -111,20 +87,15 @@ export function useDocument<T extends keyof LuminarDBSchema>(
       setData(undefined);
       setIsLoading(true);
     };
-  }, [isReady, collection, key]);
+  }, [collection, key]);
 
   return { data, isLoading };
 }
 
 export function usePrefetchIssueDetails(issueId: string) {
   const db = useLuminarDB();
-  const isReady = useIsDBReady();
 
   useIsomorphicLayoutEffect(() => {
-    if (!isReady) {
-      return;
-    }
-
     if (!issueId) {
       return;
     }
@@ -136,5 +107,5 @@ export function usePrefetchIssueDetails(issueId: string) {
         where: { issueId: { eq: issueId } },
       })
       .execute();
-  }, [isReady, issueId]);
+  }, [issueId]);
 }

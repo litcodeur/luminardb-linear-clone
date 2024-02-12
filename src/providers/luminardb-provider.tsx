@@ -1,6 +1,7 @@
-import { type LuminarDB, getDatabaseParams } from "@/lib/luminardb";
-import React from "react";
+import { getDatabaseParams, type LuminarDB } from "@/lib/luminardb";
+import { isServer } from "@tanstack/react-query";
 import { Database } from "luminardb";
+import React from "react";
 
 type LuminarDBContextType = {
   db: LuminarDB;
@@ -14,6 +15,15 @@ export function LuminarDBProvider(
   const [db] = React.useState<LuminarDB>(
     new Database(getDatabaseParams(props.workspaceId)),
   );
+
+  if (!isServer) {
+    db.collection("issue")
+      .getAll()
+      .execute()
+      .then((issues) => {
+        console.log("issues", issues);
+      });
+  }
 
   return (
     <LuminarDBContext.Provider value={{ db }}>
