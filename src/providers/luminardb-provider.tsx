@@ -16,15 +16,6 @@ export function LuminarDBProvider(
     new Database(getDatabaseParams(props.workspaceId)),
   );
 
-  if (!isServer) {
-    db.collection("issue")
-      .getAll()
-      .execute()
-      .then((issues) => {
-        console.log("issues", issues);
-      });
-  }
-
   return (
     <LuminarDBContext.Provider value={{ db }}>
       {props.children}
