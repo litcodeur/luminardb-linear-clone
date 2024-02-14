@@ -31,7 +31,7 @@
     "kbar": "^0.1.0-beta.45",
     "lodash": "^4.17.21",
     "lucide-react": "^0.311.0",
-    "luminardb": "^0.0.1-beta.5",
+    "luminardb": "latest",
     "mobx": "^6.12.0",
     "mobx-react-lite": "^4.0.5",
     "next": "^14.0.4",
