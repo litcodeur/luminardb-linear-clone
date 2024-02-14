@@ -1,7 +1,7 @@
 import { AppKBarPortal } from "@/components/KBarPortal";
 import { SortSelect, type SortOption } from "@/components/SortSelect";
 import { type Issue, type LuminarDBSchema } from "@/lib/luminardb";
-import { useDocument } from "@/lib/luminardb-hooks";
+import { useDocument, useIsDBReady } from "@/lib/luminardb-hooks";
 import {
   LuminarDBProvider,
   useLuminarDB,
@@ -23,8 +23,6 @@ import { useRouter, type NextRouter } from "next/router";
 import React from "react";
 import { default as ReactLogo } from "../../assets/images/logo.svg";
 
-import { CreateNewIssueModalButton } from "@/components/CreateNewIssueModal";
-import { ObservableIssueBoard } from "@/components/IssueBoard";
 import { ObservableIssueList } from "@/components/IssueList";
 import { ObservableIssueModal } from "@/components/IssueModal";
 import { isServer } from "@tanstack/react-query";
@@ -37,6 +35,8 @@ import {
 } from "mobx";
 import { observer } from "mobx-react-lite";
 import { Button, Tooltip, TooltipTrigger } from "react-aria-components";
+import { CreateNewIssueModalButton } from "@/components/CreateNewIssueModal";
+import { ObservableIssueBoard } from "@/components/IssueBoard";
 
 const PRIORITY_VALUE_MAP = {
   NO_PRIORITY: 0,
@@ -260,6 +260,7 @@ function WorkspacePage() {
   });
 
   const db = useLuminarDB();
+  const isReady = useIsDBReady();
 
   const [store] = React.useState(() => {
     return new Store(router);
@@ -285,6 +286,7 @@ function WorkspacePage() {
   const [view, setView] = React.useState<"list" | "board">("list");
 
   React.useEffect(() => {
+    if (!isReady) return;
     return db
       .collection("issue")
       .getAll()
@@ -292,7 +294,7 @@ function WorkspacePage() {
         setIsLoading(false);
         store.handleChange(changes);
       });
-  }, [db, store]);
+  }, [db, isReady, store]);
 
   useRegisterActions(
     Array.from(store.issues.values()).map((i) => ({

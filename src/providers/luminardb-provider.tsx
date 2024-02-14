@@ -1,7 +1,6 @@
-import { getDatabaseParams, type LuminarDB } from "@/lib/luminardb";
-import { isServer } from "@tanstack/react-query";
-import { Database } from "luminardb";
+import { type LuminarDB, getDatabaseParams } from "@/lib/luminardb";
 import React from "react";
+import { Database } from "luminardb";
 
 type LuminarDBContextType = {
   db: LuminarDB;
