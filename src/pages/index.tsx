@@ -19,7 +19,7 @@ export const getServerSideProps: GetServerSideProps = async function ({
     return {
       props: {},
       redirect: {
-        destination: `/m/${workspaceId}`,
+        destination: `/s/${workspaceId}`,
       },
     };
   }
@@ -33,7 +33,7 @@ export const getServerSideProps: GetServerSideProps = async function ({
   return {
     props: {},
     redirect: {
-      destination: `/m/${workspaceId}`,
+      destination: `/s/${workspaceId}`,
     },
   };
 };

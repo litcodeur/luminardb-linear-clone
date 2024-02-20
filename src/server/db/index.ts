@@ -5,7 +5,11 @@ import { env } from "@/env";
 import * as schema from "./schema";
 
 const poolConnection = mysql.createPool({
-  uri: env.DATABASE_URL,
+  user: env.DB_USER,
+  password: env.DB_PASSWORD,
+  database: env.DB_NAME,
+  host: env.DB_HOST,
+  port: env.DB_PORT,
 });
 
 export const db = drizzle(poolConnection, { schema: schema, mode: "default" });

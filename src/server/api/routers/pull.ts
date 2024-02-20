@@ -144,10 +144,6 @@ export const pullRouter = createTRPCRouter({
         };
       }
 
-      // throw new TRPCError({
-      //   code: "INTERNAL_SERVER_ERROR",
-      // });
-
       const { lastChangeId } = parsedCursor as z.infer<
         typeof WorkspaceChangeCursor
       >;

@@ -1,4 +1,4 @@
-import { type Issue } from "@/lib/luminardb";
+import { type LDBIssue } from "@/lib/luminardb";
 import clsx from "clsx";
 import {
   Button,
@@ -9,7 +9,7 @@ import {
 } from "react-aria-components";
 import { StatusIcon } from "./StatusIcon";
 
-type Status = Issue["status"];
+type Status = LDBIssue["status"];
 
 export const STATUS_LIST: Array<{ value: Status; label: string }> = [
   { value: "BACKLOG", label: "Backlog" },

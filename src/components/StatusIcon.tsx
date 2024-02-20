@@ -1,11 +1,11 @@
-import { type Issue } from "@/lib/luminardb";
+import { type LDBIssue } from "@/lib/luminardb";
 import CancelIcon from "../assets/icons/cancel.svg";
 import BacklogIcon from "../assets/icons/circle-dot.svg";
 import TodoIcon from "../assets/icons/circle.svg";
 import DoneIcon from "../assets/icons/done.svg";
 import InProgressIcon from "../assets/icons/half-circle.svg";
 
-type Status = Issue["status"];
+type Status = LDBIssue["status"];
 
 type SVGELement = React.FunctionComponent<
   React.ComponentPropsWithoutRef<"svg">

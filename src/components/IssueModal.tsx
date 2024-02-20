@@ -1,5 +1,3 @@
-import { type LuminarDBSchema } from "@/lib/luminardb";
-import { useCollection, useDocument } from "@/lib/luminardb-hooks";
 import { useLuminarDB } from "@/providers/luminardb-provider";
 import { generateId } from "@/utils/id";
 import clsx from "clsx";
@@ -23,11 +21,12 @@ import {
   TooltipTrigger,
 } from "react-aria-components";
 import { Remark } from "react-remark";
-import { type InferSchemaTypeFromCollection } from "luminardb";
 import { PRIORITY_LIST, PriorityButton } from "./PriorityButton";
 import { STATUS_LIST, StatusButton } from "./StatusButton";
 import { observer } from "mobx-react-lite";
 import { FocusScope } from "react-aria";
+import { Comment, Issue } from "@/lib/models";
+import { ObjectPool } from "@/lib/orm";
 
 function IssueModal({
   issue,
@@ -37,14 +36,16 @@ function IssueModal({
   handleGoForward,
   onOpenChange,
   workspaceId,
+  pool,
 }: {
-  issue: InferSchemaTypeFromCollection<LuminarDBSchema["issue"]>;
+  issue: Issue;
   onOpenChange: (isOpen: boolean) => void;
   handleGoForward: () => void;
   handleGoBackward: () => void;
   canGoForward: boolean;
   canGoBackward: boolean;
   workspaceId: string;
+  pool: ObjectPool;
 }) {
   const outerRef = React.useRef<HTMLDivElement>(null);
   const innerRef = React.useRef<HTMLDivElement>(null);
@@ -53,9 +54,7 @@ function IssueModal({
     isVisible: s.visualState !== VisualState.hidden,
   }));
 
-  const { data: description } = useDocument("description", issue.id);
-
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     function handleResize() {
       if (!outerRef.current) return;
       if (!innerRef.current) return;
@@ -81,7 +80,7 @@ function IssueModal({
     return () => {
       window.removeEventListener("resize", handleResize);
     };
-  }, [description]);
+  }, [issue.description.body]);
 
   function getActions() {
     const actions: Array<Action> = [];
@@ -117,12 +116,9 @@ function IssueModal({
         id: `change-issue-${issue.id}-status-to-${value}`,
         name: label,
         parent: `change-issue-${issue.id}-status`,
-        async perform() {
-          void db.mutate.update({
-            collection: "issue",
-            key: issue.id,
-            delta: { status: value, updatedAt: new Date().toISOString() },
-          });
+        perform() {
+          issue.status = value;
+          issue.save();
         },
       });
     });
@@ -138,11 +134,8 @@ function IssueModal({
         name: label,
         parent: `change-issue-${issue.id}-priority`,
         async perform() {
-          void db.mutate.update({
-            collection: "issue",
-            key: issue.id,
-            delta: { priority: value, updatedAt: new Date().toISOString() },
-          });
+          issue.priority = value;
+          issue.save();
         },
       });
     });
@@ -154,10 +147,7 @@ function IssueModal({
         shortcut: ["d"],
         priority: Priority.HIGH,
         async perform() {
-          await db.mutate.delete({
-            collection: "issue",
-            key: issue.id,
-          });
+          issue.delete();
           onOpenChange(false);
         },
       });
@@ -168,22 +158,12 @@ function IssueModal({
 
   useRegisterActions(getActions(), [canGoBackward, canGoForward, issue.id]);
 
-  const { data: comments } = useCollection(
-    "comment",
-    {
-      where: { issueId: { eq: issue.id } },
-    },
-    [issue.id],
-  );
-
-  const db = useLuminarDB();
-
   const childBaseClassName = clsx("issue-modal-grid-item");
 
   const [isEditing, setIsEditing] = React.useState(false);
 
   const [descriptionBody, setDescriptionBody] = React.useState(
-    description?.body,
+    issue.description.body,
   );
 
   return (
@@ -305,14 +285,9 @@ function IssueModal({
                                   "hover:bg-neutral-700 focus:bg-neutral-700",
                                 )}
                                 onPress={async function () {
-                                  await db.mutate.update({
-                                    collection: "description",
-                                    delta: {
-                                      body: descriptionBody,
-                                      updatedAt: new Date().toISOString(),
-                                    },
-                                    key: description!.issueId,
-                                  });
+                                  const description = issue.description;
+                                  description.body = descriptionBody;
+                                  description.save();
                                   setIsEditing(false);
                                 }}
                               >
@@ -337,7 +312,7 @@ function IssueModal({
                       </div>
                     ) : null}
                     <div className="overflow-x-scroll rounded-md border border-solid border-neutral-500/50 bg-zinc-800 p-4">
-                      {description ? (
+                      {issue.description ? (
                         isEditing ? (
                           <TextArea
                             className={clsx(
@@ -345,13 +320,15 @@ function IssueModal({
                             )}
                             autoFocus
                             rows={4}
-                            value={descriptionBody ?? description?.body}
+                            value={descriptionBody ?? issue.description.body}
                             onChange={function (e) {
                               setDescriptionBody(e.target.value);
                             }}
                           />
                         ) : (
-                          <Remark>{description.body}</Remark>
+                          <div className="prose-sm prose-neutral">
+                            <Remark>{issue.description.body}</Remark>
+                          </div>
                         )
                       ) : (
                         <div>Loading...</div>
@@ -361,7 +338,7 @@ function IssueModal({
                   <hr className="my-8 bg-neutral-400" />
                   <h3 className="text-lg font-bold">Comments</h3>
                   <div className="mt-4 flex flex-col gap-4">
-                    {comments
+                    {issue.comments.toArray
                       .sort(function (a, b) {
                         return (
                           new Date(a.createdAt).getTime() -
@@ -396,10 +373,7 @@ function IssueModal({
                                       >
                                         <Button
                                           onPress={async function () {
-                                            void db.mutate.delete({
-                                              collection: "comment",
-                                              key: comment.id,
-                                            });
+                                            comment.delete();
                                           }}
                                         >
                                           <X className="h-4 w-4" />
@@ -419,14 +393,18 @@ function IssueModal({
                                   </div>
                                 </div>
                               </div>
-                              <div className="px-4 py-2">
+                              <div className="prose-sm prose-neutral px-4 py-2">
                                 <Remark>{comment.body}</Remark>
                               </div>
                             </div>
                           </div>
                         );
                       })}
-                    <CommentForm issueId={issue.id} workspaceId={workspaceId} />
+                    <CommentForm
+                      pool={pool}
+                      issueId={issue.id}
+                      workspaceId={workspaceId}
+                    />
                   </div>
                 </div>
               </div>
@@ -444,14 +422,8 @@ function IssueModal({
                 <PriorityButton
                   priority={issue.priority}
                   onPriorityChange={async function (priority) {
-                    void db.mutate.update({
-                      collection: "issue",
-                      key: issue.id,
-                      delta: {
-                        priority,
-                        updatedAt: new Date().toISOString(),
-                      },
-                    });
+                    issue.priority = priority;
+                    issue.save();
                   }}
                   showLabel
                 />
@@ -459,14 +431,8 @@ function IssueModal({
                 <StatusButton
                   status={issue.status}
                   onSelectedStatusChange={async function (status) {
-                    void db.mutate.update({
-                      collection: "issue",
-                      delta: {
-                        status,
-                        updatedAt: new Date().toISOString(),
-                      },
-                      key: issue.id,
-                    });
+                    issue.status = status;
+                    issue.save();
                   }}
                   showLabel
                 />
@@ -479,10 +445,7 @@ function IssueModal({
                       "w-full px-2 py-1",
                     )}
                     onPress={async function () {
-                      await db.mutate.delete({
-                        collection: "issue",
-                        key: issue.id,
-                      });
+                      issue.delete();
                       onOpenChange(false);
                     }}
                   >
@@ -501,29 +464,27 @@ function IssueModal({
 function CommentForm({
   issueId,
   workspaceId,
+  pool,
 }: {
   issueId: string;
   workspaceId: string;
+  pool: ObjectPool;
 }) {
   const [commentBody, setCommentBody] = React.useState("");
-  const db = useLuminarDB();
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!commentBody) return;
     const commentId = generateId("comment");
-    await db.mutate.create({
-      collection: "comment",
-      key: commentId,
-      value: {
-        id: commentId,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        creator: workspaceId,
-        body: commentBody,
-        issueId: issueId,
-      },
+    const comment = new Comment({
+      id: commentId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      creator: workspaceId,
+      body: commentBody,
+      issueId,
     });
+    pool.remoteOps.create(comment);
     setCommentBody("");
   }
   return (

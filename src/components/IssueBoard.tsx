@@ -1,5 +1,5 @@
 import { useGetAvailableHeight, useGetAvailableWidth } from "@/lib/hooks";
-import { type Issue } from "@/lib/luminardb";
+import { type LDBIssue } from "@/lib/luminardb";
 import { usePrefetchIssueDetails } from "@/lib/luminardb-hooks";
 import { useLuminarDB } from "@/providers/luminardb-provider";
 import clsx from "clsx";
@@ -26,10 +26,10 @@ class DragStore {
     makeAutoObservable(this);
   }
 
-  get parsed(): Issue | null {
+  get parsed(): LDBIssue | null {
     if (!this.item) return null;
 
-    return JSON.parse(this.item.serializedIssue) as Issue;
+    return JSON.parse(this.item.serializedIssue) as LDBIssue;
   }
 
   setItem(item: IssueDragItem | null) {
@@ -43,7 +43,7 @@ type IssueDragItem = {
   serializedIssue: string;
 };
 
-function IssueCard({ issue }: { issue: Issue }) {
+function IssueCard({ issue }: { issue: LDBIssue }) {
   usePrefetchIssueDetails(issue.id);
 
   return (
@@ -65,8 +65,8 @@ const ObservableIssueCard = observer(IssueCard);
 const IssueBoardItem = React.forwardRef<
   HTMLAnchorElement,
   {
-    issue: Issue;
-    onSelect: (issue: Issue) => void;
+    issue: LDBIssue;
+    onSelect: (issue: LDBIssue) => void;
   }
 >(({ issue, onSelect }, ref) => {
   const previewRef = React.useRef<DragPreviewRenderer>(null);
@@ -132,11 +132,11 @@ function Column({
   onIssueSelect,
   onIssueUpdate,
 }: {
-  status: Issue["status"];
+  status: LDBIssue["status"];
   title: string;
-  issues: Array<Issue>;
-  onIssueSelect: (issue: Issue) => void;
-  onIssueUpdate: (issue: Issue) => void;
+  issues: Array<LDBIssue>;
+  onIssueSelect: (issue: LDBIssue) => void;
+  onIssueUpdate: (issue: LDBIssue) => void;
 }) {
   const db = useLuminarDB();
 
@@ -170,7 +170,7 @@ function Column({
 
       if (!serializedIssue) return;
 
-      const issue = JSON.parse(serializedIssue) as Issue;
+      const issue = JSON.parse(serializedIssue) as LDBIssue;
 
       const delta = {
         status,
@@ -281,9 +281,9 @@ function IssueBoard({
   onIssueSelect,
   onIssueUpdate,
 }: {
-  issuesGroupedByStatus: Record<Issue["status"], Array<Issue>>;
-  onIssueSelect: (issue: Issue) => void;
-  onIssueUpdate: (issue: Issue) => void;
+  issuesGroupedByStatus: Record<LDBIssue["status"], Array<LDBIssue>>;
+  onIssueSelect: (issue: LDBIssue) => void;
+  onIssueUpdate: (issue: LDBIssue) => void;
 }) {
   const ref = React.useRef<HTMLDivElement>(null);
 
@@ -318,7 +318,7 @@ function IssueBoard({
 
 export const ObservableIssueBoard = observer(IssueBoard);
 
-const columns: Array<{ status: Issue["status"]; title: string }> = [
+const columns: Array<{ status: LDBIssue["status"]; title: string }> = [
   {
     status: "BACKLOG",
     title: "Backlog",

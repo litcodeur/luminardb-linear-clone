@@ -13,7 +13,7 @@ import {
   type WriteTransaction,
 } from "luminardb";
 
-export type Issue = {
+export type LDBIssue = {
   id: string;
   title: string;
   createdAt: string;
@@ -25,14 +25,14 @@ export type Issue = {
 
 const issueCollectionMetadata = {
   indexes: {},
-} satisfies CollectionMetadata<Issue>;
+} satisfies CollectionMetadata<LDBIssue>;
 
-const issueCollection = new Collection<Issue, typeof issueCollectionMetadata>(
-  "issue",
-  issueCollectionMetadata,
-);
+const issueCollection = new Collection<
+  LDBIssue,
+  typeof issueCollectionMetadata
+>("issue", issueCollectionMetadata);
 
-type Comment = {
+export type LDBComment = {
   id: string;
   createdAt: string;
   updatedAt: string;
@@ -43,14 +43,14 @@ type Comment = {
 
 const commentCollectionMetadata = {
   indexes: { issueId: true },
-} satisfies CollectionMetadata<Comment>;
+} satisfies CollectionMetadata<LDBComment>;
 
 const commentCollection = new Collection<
-  Comment,
+  LDBComment,
   typeof commentCollectionMetadata
 >("comment", commentCollectionMetadata);
 
-type Description = {
+export type LDBDescription = {
   createdAt: string;
   updatedAt: string;
   body: string;
@@ -59,10 +59,10 @@ type Description = {
 
 const descriptionCollectionMetadata = {
   indexes: { issueId: true },
-} satisfies CollectionMetadata<Description>;
+} satisfies CollectionMetadata<LDBDescription>;
 
 const descriptionCollection = new Collection<
-  Description,
+  LDBDescription,
   typeof descriptionCollectionMetadata
 >("description", descriptionCollectionMetadata);
 
@@ -91,8 +91,8 @@ function getMutators(workspaceId: string) {
       title,
     }: {
       descriptionBody: string;
-      priority: Issue["priority"];
-      status: Issue["status"];
+      priority: LDBIssue["priority"];
+      status: LDBIssue["status"];
       title: string;
     }) {
       return resolver({
@@ -105,14 +105,14 @@ function getMutators(workspaceId: string) {
             priority,
             status,
             title,
-          } satisfies Issue;
+          } satisfies LDBIssue;
 
           const description = {
             body: descriptionBody,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
             issueId: issue.id,
-          } satisfies Description;
+          } satisfies LDBDescription;
 
           await tx.collection("issue").insert(issue.id, issue);
           await tx

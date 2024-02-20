@@ -1,4 +1,4 @@
-import { type Issue } from "@/lib/luminardb";
+import { type LDBIssue } from "@/lib/luminardb";
 import { useLuminarDB } from "@/providers/luminardb-provider";
 import { zodResolver } from "@hookform/resolvers/zod";
 import clsx from "clsx";
@@ -26,8 +26,8 @@ import { tinykeys } from "@/lib/tinykeys";
 type FormState = {
   title: string;
   description: string;
-  priority: Issue["priority"];
-  status: Issue["status"];
+  priority: LDBIssue["priority"];
+  status: LDBIssue["status"];
 };
 
 const schema = z.object({

@@ -1,4 +1,3 @@
-import { type Issue, type LuminarDBSchema } from "@/lib/luminardb";
 import { usePrefetchIssueDetails } from "@/lib/luminardb-hooks";
 import { useLuminarDB } from "@/providers/luminardb-provider";
 import clsx from "clsx";
@@ -10,11 +9,12 @@ import { useFocus, usePress } from "react-aria";
 import useVirtual from "react-cool-virtual";
 import { PriorityButton } from "./PriorityButton";
 import { StatusButton } from "./StatusButton";
+import { Issue } from "@/lib/models";
 
 const IssueListItem = React.forwardRef<
   HTMLDivElement,
   {
-    issue: InferSchemaTypeFromCollection<LuminarDBSchema["issue"]>;
+    issue: Issue;
     onSelect: (issue: Issue) => void;
     style?: React.CSSProperties;
   }
@@ -45,27 +45,17 @@ const IssueListItem = React.forwardRef<
         <div className="flex items-center gap-2">
           <PriorityButton
             onPriorityChange={function (priority) {
-              void db.mutate.update({
-                collection: "issue",
-                delta: {
-                  priority,
-                  updatedAt: new Date().toISOString(),
-                },
-                key: issue.id,
-              });
+              issue.priority = priority;
+              issue.updatedAt = new Date().toISOString();
+              issue.save();
             }}
             priority={issue.priority}
           />
           <StatusButton
             onSelectedStatusChange={async function (status) {
-              void db.mutate.update({
-                collection: "issue",
-                delta: {
-                  status,
-                  updatedAt: new Date().toISOString(),
-                },
-                key: issue.id,
-              });
+              issue.status = status;
+              issue.updatedAt = new Date().toISOString();
+              issue.save();
             }}
             status={issue.status}
           />
@@ -119,9 +109,8 @@ function IssueList({
   issues,
   onIssueSelect,
 }: {
-  issues: Array<InferSchemaTypeFromCollection<LuminarDBSchema["issue"]>>;
+  issues: Array<Issue>;
   onIssueSelect: (issue: Issue) => void;
-  selectedIssueId?: string;
 }) {
   const { outerRef, innerRef, items } = useVirtual<
     HTMLDivElement,

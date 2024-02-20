@@ -1,7 +1,5 @@
 import { AppKBarPortal } from "@/components/KBarPortal";
-import { SortSelect, type SortOption } from "@/components/SortSelect";
-import { type LDBIssue, type LuminarDBSchema } from "@/lib/luminardb";
-import { useDocument, useIsDBReady } from "@/lib/luminardb-hooks";
+import { useDocument } from "@/lib/luminardb-hooks";
 import {
   LuminarDBProvider,
   useLuminarDB,
@@ -12,31 +10,46 @@ import { generateId, idDetails } from "@/utils/id";
 import clsx from "clsx";
 import Cookies from "cookies";
 import { KBarProvider, useRegisterActions } from "kbar";
-import _ from "lodash";
 import { LayoutGrid, List, Loader2 } from "lucide-react";
-import {
-  type InferSchemaTypeFromCollection,
-  type QueryResultChange,
-} from "luminardb";
 import { type GetServerSideProps } from "next";
-import { useRouter, type NextRouter } from "next/router";
+import { useRouter } from "next/router";
 import React from "react";
 import { default as ReactLogo } from "../../assets/images/logo.svg";
 
+import { CreateNewIssueModalButton } from "@/components/CreateNewIssueModal";
 import { ObservableIssueList } from "@/components/IssueList";
-import { ObservableIssueModal } from "@/components/IssueModal";
-import { isServer } from "@tanstack/react-query";
-import {
-  action,
-  computed,
-  makeAutoObservable,
-  observable,
-  transaction,
-} from "mobx";
+import { ObjectGraphFactory } from "@/lib/object-graph";
 import { observer } from "mobx-react-lite";
 import { Button, Tooltip, TooltipTrigger } from "react-aria-components";
-import { CreateNewIssueModalButton } from "@/components/CreateNewIssueModal";
-import { ObservableIssueBoard } from "@/components/IssueBoard";
+import { SortOption, SortSelect } from "@/components/SortSelect";
+import { Issue } from "@/lib/models";
+import _ from "lodash";
+import { ObservableIssueModal } from "@/components/IssueModal";
+
+function useURLState<T extends string = string>(key: string, defaultValue: T) {
+  const {
+    query: { [key]: value },
+    replace,
+  } = useRouter();
+
+  const currentValue: T = value ? (String(value) as T) : defaultValue;
+
+  const set = React.useCallback(
+    (newValue: T) => {
+      const url = new URL(window.location.href);
+      if (!newValue) {
+        url.searchParams.delete(key);
+      } else {
+        url.searchParams.set(key, newValue);
+      }
+
+      replace(url, undefined, { shallow: true });
+    },
+    [key, replace],
+  );
+
+  return [currentValue, set] as const;
+}
 
 const PRIORITY_VALUE_MAP = {
   NO_PRIORITY: 0,
@@ -44,10 +57,7 @@ const PRIORITY_VALUE_MAP = {
   MEDIUM: 2,
   HIGH: 3,
   URGENT: 4,
-} satisfies Record<
-  InferSchemaTypeFromCollection<LuminarDBSchema["issue"]>["priority"],
-  number
->;
+} satisfies Record<Issue["priority"], number>;
 
 const STATUS_VALUE_MAP = {
   BACKLOG: 0,
@@ -55,40 +65,7 @@ const STATUS_VALUE_MAP = {
   IN_PROGRESS: 2,
   DONE: 3,
   CANCELLED: 4,
-} satisfies Record<
-  InferSchemaTypeFromCollection<LuminarDBSchema["issue"]>["status"],
-  number
->;
-
-export class IssueObservable {
-  id: string;
-  title: string;
-  createdAt: string;
-  updatedAt: string;
-  creator: string;
-  status: "BACKLOG" | "TODO" | "IN_PROGRESS" | "DONE" | "CANCELLED";
-  priority: "NO_PRIORITY" | "LOW" | "MEDIUM" | "HIGH" | "URGENT";
-
-  constructor(issue: LDBIssue) {
-    this.id = issue.id;
-    this.title = issue.title;
-    this.createdAt = issue.createdAt;
-    this.updatedAt = issue.updatedAt;
-    this.creator = issue.creator;
-    this.status = issue.status;
-    this.priority = issue.priority;
-    makeAutoObservable(this);
-  }
-
-  update(issue: LDBIssue) {
-    this.title = issue.title;
-    this.createdAt = issue.createdAt;
-    this.updatedAt = issue.updatedAt;
-    this.creator = issue.creator;
-    this.status = issue.status;
-    this.priority = issue.priority;
-  }
-}
+} satisfies Record<Issue["status"], number>;
 
 function reverseTimestamp(timestamp: string): string {
   return Math.floor(
@@ -96,159 +73,31 @@ function reverseTimestamp(timestamp: string): string {
   ).toString();
 }
 
-class Store {
-  issues = new Map<string, IssueObservable>();
-  sortOption: SortOption;
-  selectedIssue: LDBIssue | null = null;
-
-  private getSearchParams<T = string>(key: string): T {
-    let value = this.router.query[key] as T;
-    if (!isServer) {
-      const url = new URL(window.location.href);
-      value = url.searchParams.get(key) as T;
+function getSortFn(sortOption: SortOption) {
+  return function (issue: Issue) {
+    if (sortOption === "MODIFIED") {
+      return reverseTimestamp(issue.updatedAt);
     }
-    return value;
-  }
-
-  private setSearchParams(key: string, value: string) {
-    const url = new URL(window.location.href);
-    if (!value) {
-      url.searchParams.delete(key);
-    } else {
-      url.searchParams.set(key, value);
+    if (sortOption === "PRIORITY") {
+      return `${PRIORITY_VALUE_MAP[issue.priority]}-${reverseTimestamp(
+        issue.updatedAt,
+      )}`;
     }
-    void this.router.replace(url, undefined, { shallow: true });
-  }
 
-  private getSortValueFromURL() {
-    const sortOption = this.getSearchParams<SortOption>("sort");
-    if (
-      sortOption === "CREATED" ||
-      sortOption === "MODIFIED" ||
-      sortOption === "PRIORITY" ||
-      sortOption === "STATUS"
-    ) {
-      return sortOption;
+    if (sortOption === "STATUS") {
+      return `${STATUS_VALUE_MAP[issue.status]}-${reverseTimestamp(
+        issue.updatedAt,
+      )}`;
     }
-    return "CREATED";
-  }
 
-  constructor(private router: NextRouter) {
-    this.sortOption = this.getSortValueFromURL();
-    makeAutoObservable(this, {
-      issues: observable,
-      sortOption: observable,
-      sortedIssues: computed,
-      handleChange: action,
-      setSortOption: action,
-    });
-  }
-
-  handleChange(changes: Array<QueryResultChange>) {
-    transaction(() => {
-      for (const change of changes) {
-        switch (change.action) {
-          case "INSERT":
-            const observable = new IssueObservable(change.value as LDBIssue);
-            this.issues.set(change.key as string, observable);
-            break;
-          case "UPDATE":
-            const issue = this.issues.get(change.key as string);
-            if (!issue) break;
-            issue.update({ ...issue, ...change.delta } as LDBIssue);
-            break;
-          case "DELETE":
-            this.issues.delete(change.key as string);
-            break;
-          default:
-            throw new Error("Invalid query change method");
-        }
-
-        if (change.key === this.getSearchParams("issueId")) {
-          const issue = this.issues.get(change.key);
-          if (!issue) continue;
-          this.setSelectedIssue(issue);
-        }
-      }
-    });
-  }
-
-  private getSortFn(sortOption: SortOption) {
-    return function (issue: LDBIssue) {
-      if (sortOption === "MODIFIED") {
-        return reverseTimestamp(issue.updatedAt);
-      }
-      if (sortOption === "PRIORITY") {
-        return `${PRIORITY_VALUE_MAP[issue.priority]}-${reverseTimestamp(
-          issue.updatedAt,
-        )}`;
-      }
-
-      if (sortOption === "STATUS") {
-        return `${STATUS_VALUE_MAP[issue.status]}-${reverseTimestamp(
-          issue.updatedAt,
-        )}`;
-      }
-
-      return reverseTimestamp(issue.createdAt);
-    };
-  }
-
-  get sortedIssues() {
-    const sortOption = this.sortOption;
-
-    const arrayOfIssues = Array.from(this.issues.values());
-
-    const result = _.sortBy(arrayOfIssues, [this.getSortFn(sortOption)]);
-
-    return result;
-  }
-
-  setSortOption(sortOption: SortOption) {
-    this.sortOption = sortOption;
-    this.setSearchParams("sort", sortOption);
-  }
-
-  setSelectedIssue(issue: LDBIssue | null) {
-    if (!issue) {
-      this.selectedIssue = null;
-      this.setSearchParams("issueId", "");
-      return;
-    }
-    this.selectedIssue = issue;
-    this.setSearchParams("issueId", issue.id);
-  }
-
-  get issuesGroupedByStatus() {
-    return _.groupBy(
-      _.sortBy(this.sortedIssues, [this.getSortFn("PRIORITY")]),
-      "status",
-    ) as unknown as Record<LDBIssue["status"], Array<LDBIssue>>;
-  }
-
-  get nextIssue() {
-    const index = this.sortedIssues.findIndex(
-      (i) => i.id === this.selectedIssue?.id,
-    );
-    if (index === -1) return null;
-    return this.sortedIssues[index + 1]!;
-  }
-
-  get prevIssue() {
-    const index = this.sortedIssues.findIndex(
-      (i) => i.id === this.selectedIssue?.id,
-    );
-    if (index === -1) return null;
-    return this.sortedIssues[index - 1]!;
-  }
+    return reverseTimestamp(issue.createdAt);
+  };
 }
 
 function WorkspacePage() {
   const {
     query: { workspaceId },
   } = useRouter();
-
-  const router = useRouter();
 
   const { data: cursorMeta } = useDocument("cursorMeta", "meta", {
     async onChange(data) {
@@ -260,10 +109,9 @@ function WorkspacePage() {
   });
 
   const db = useLuminarDB();
-  const isReady = useIsDBReady();
 
-  const [store] = React.useState(() => {
-    return new Store(router);
+  const [graph] = React.useState(() => {
+    return ObjectGraphFactory.getInstance(workspaceId as string, db);
   });
 
   const pusher = usePusher();
@@ -282,43 +130,36 @@ function WorkspacePage() {
     };
   }, [db, pusher, workspaceId]);
 
-  const [isLoading, setIsLoading] = React.useState(true);
   const [view, setView] = React.useState<"list" | "board">("list");
+  const [sortOrder, setSortOrder] = useURLState<SortOption>("sort", "CREATED");
+  const [selectedIssueId, setSelectedIssueId] = useURLState<string>("iss", "");
 
-  React.useEffect(() => {
-    if (!isReady) return;
-    return db
-      .collection("issue")
-      .getAll()
-      .watch((changes) => {
-        setIsLoading(false);
-        store.handleChange(changes);
-      });
-  }, [db, isReady, store]);
-
-  useRegisterActions(
-    Array.from(store.issues.values()).map((i) => ({
-      id: `issue:${i.id}`,
-      name: i.title,
-      perform() {
-        store.setSelectedIssue(i);
-      },
-    })),
-    [store.issues.size],
-  );
-
-  useRegisterActions([
-    {
-      id: "toggle-view",
-      name: "Toggle view",
-      shortcut: ["$mod+b"],
-      perform() {
-        setView((v) => (v === "list" ? "board" : "list"));
-      },
-    },
+  const sortedIssues = _.sortBy(graph.workspace.issues.toArray, [
+    getSortFn(sortOrder),
   ]);
 
-  if (isLoading) {
+  const selectedIssueIndex = sortedIssues.findIndex(
+    (i) => i.id === selectedIssueId,
+  );
+  const selectedIssue =
+    selectedIssueIndex === -1 ? null : sortedIssues[selectedIssueIndex];
+  const nextIssue =
+    selectedIssueIndex === -1 ? null : sortedIssues[selectedIssueIndex + 1];
+  const previousIssue =
+    selectedIssueIndex === -1 ? null : sortedIssues[selectedIssueIndex - 1];
+
+  useRegisterActions(
+    sortedIssues.map((i) => ({
+      id: `kbar-issue-${i.id}`,
+      name: i.title,
+      perform() {
+        setSelectedIssueId(i.id);
+      },
+    })),
+    [sortedIssues],
+  );
+
+  if (!graph.isLoaded) {
     return null;
   }
 
@@ -346,12 +187,12 @@ function WorkspacePage() {
         <div className="w-full">
           <div className="flex w-full items-center justify-between border-b border-solid border-neutral-200/20 px-4 py-2 text-sm">
             <div className="">
-              {store.sortedIssues.length === 0 ? (
+              {graph.workspace.issues.length === 0 ? (
                 <p>Syncing...</p>
               ) : (
                 <div className="flex items-center gap-2">
                   <p className="">
-                    <span>{store.sortedIssues.length}</span> issues
+                    <span>{graph.workspace.issues.length}</span> issues
                   </p>
                   {cursorMeta?.status !== "PARTIAL_SYNC_COMPLETE" ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -441,34 +282,35 @@ function WorkspacePage() {
                 </TooltipTrigger>
               </div>
               <SortSelect
-                selectedOption={store.sortOption}
+                selectedOption={sortOrder}
                 onSelectedOptionChange={function (sortOption) {
-                  store.setSortOption(sortOption);
+                  setSortOrder(sortOption);
                 }}
               />
             </div>
           </div>
           <div>
-            {store.selectedIssue ? (
+            {selectedIssue ? (
               <ObservableIssueModal
-                issue={store.selectedIssue}
-                canGoBackward={!!store.prevIssue}
-                canGoForward={!!store.nextIssue}
+                pool={graph.getPool()}
+                issue={selectedIssue}
+                canGoBackward={!!previousIssue}
+                canGoForward={!!nextIssue}
                 onOpenChange={function (isOpen) {
-                  if (!isOpen) store.setSelectedIssue(null);
+                  if (!isOpen) setSelectedIssueId("");
                 }}
                 handleGoBackward={function () {
-                  if (!store.prevIssue) return;
-                  store.setSelectedIssue(store.prevIssue);
+                  if (!previousIssue) return;
+                  setSelectedIssueId(previousIssue.id);
                 }}
                 handleGoForward={function () {
-                  if (!store.nextIssue) return;
-                  store.setSelectedIssue(store.nextIssue);
+                  if (!nextIssue) return;
+                  setSelectedIssueId(nextIssue.id);
                 }}
                 workspaceId={workspaceId as string}
               />
             ) : null}
-            {view === "board" ? (
+            {/* {view === "board" ? (
               <ObservableIssueBoard
                 onIssueSelect={function (i) {
                   store.setSelectedIssue(i);
@@ -488,7 +330,14 @@ function WorkspacePage() {
                   store.setSelectedIssue(issue);
                 }}
               />
-            )}
+            )} */}
+
+            <ObservableIssueList
+              issues={sortedIssues}
+              onIssueSelect={(issue) => {
+                setSelectedIssueId(issue.id);
+              }}
+            />
           </div>
         </div>
       </div>
@@ -501,7 +350,12 @@ const ObservableWorkspacePage = observer(WorkspacePage);
 export default function WorkspacePageWithProviders() {
   const {
     query: { workspaceId },
+    isReady,
   } = useRouter();
+
+  if (!isReady) {
+    return null;
+  }
 
   return (
     <LuminarDBProvider workspaceId={workspaceId as string}>
@@ -526,9 +380,6 @@ export const getServerSideProps: GetServerSideProps<
   if (workspaceId === params?.workspaceId) {
     return {
       props: {},
-      redirect: {
-        destination: `/s/${workspaceId}`,
-      },
     };
   }
 
